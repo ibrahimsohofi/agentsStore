@@ -1,0 +1,376 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(BUYER)
+  bio           String?
+  company       String?
+  website       String?
+  verified      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  agents        Agent[]
+  orders        Order[]
+  reviews       Review[]
+  agentTests    AgentTest[]
+  notifications Notification[]
+  adminActions  AdminAction[]
+  preferences   UserPreferences?
+
+  // Seller specific fields
+  stripeAccountId String?
+  totalSales      Int     @default(0)
+  totalRevenue    Float   @default(0)
+  rating          Float   @default(0)
+  reviewCount     Int     @default(0)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Agent {
+  id              String      @id @default(cuid())
+  name            String
+  description     String
+  longDescription String?
+  price           Float
+  category        String
+  tags            String      // JSON array of tags
+  requirements    String      // JSON array of requirements
+  integrations    String      // JSON array of integrations
+  features        String      // JSON array of features
+  image           String?
+  preview         String?     // JSON object with images/videos
+  downloadUrl     String?
+  documentation   String?
+  demo            String?
+  version         String      @default("1.0.0")
+  status          AgentStatus @default(DRAFT)
+  featured        Boolean     @default(false)
+  verified        Boolean     @default(false)
+  totalSales      Int         @default(0)
+  totalRevenue    Float       @default(0)
+  rating          Float       @default(0)
+  reviewCount     Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  sellerId String
+  seller   User           @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  orders   Order[]
+  reviews  Review[]
+  tests    AgentTest[]
+  insights AgentInsight[]
+
+  @@index([category])
+  @@index([status])
+  @@index([featured])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  status          OrderStatus @default(PENDING)
+  totalAmount     Float
+  stripePaymentId String?
+  paymentStatus   PaymentStatus @default(PENDING)
+  downloadCount   Int         @default(0)
+  maxDownloads    Int         @default(5)
+  expiresAt       DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  buyerId String
+  buyer   User   @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([buyerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  rating    Int      // 1-5 stars
+  comment   String
+  helpful   Int      @default(0)
+  unhelpful Int      @default(0)
+  verified  Boolean  @default(false) // Verified purchase
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  // Track user interactions
+  helpfulVotes ReviewVote[]
+
+  @@unique([userId, agentId]) // One review per user per agent
+  @@index([agentId])
+  @@index([rating])
+}
+
+model ReviewVote {
+  id       String @id @default(cuid())
+  isHelpful Boolean // true for helpful, false for unhelpful
+
+  // Relations
+  userId   String
+  reviewId String
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, reviewId]) // One vote per user per review
+}
+
+model Analytics {
+  id             String   @id @default(cuid())
+  date           DateTime @default(now())
+  totalSales     Int      @default(0)
+  totalRevenue   Float    @default(0)
+  newUsers       Int      @default(0)
+  totalAgents    Int      @default(0)
+  totalOrders    Int      @default(0)
+  conversionRate Float    @default(0)
+
+  @@unique([date])
+}
+
+model AgentTest {
+  id          String         @id @default(cuid())
+  agentId     String
+  agent       Agent          @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  testType    TestType
+  status      TestStatus     @default(PENDING)
+  score       Float?
+  results     String?        // JSON object with detailed test results
+  feedback    String?
+  testerId    String?
+  tester      User?          @relation(fields: [testerId], references: [id])
+  createdAt   DateTime       @default(now())
+  completedAt DateTime?
+
+  @@index([agentId])
+  @@index([status])
+}
+
+model Notification {
+  id          String             @id @default(cuid())
+  userId      String
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  message     String
+  data        String?            // JSON object with additional data
+  read        Boolean            @default(false)
+  readAt      DateTime?
+  createdAt   DateTime           @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model AdminAction {
+  id          String       @id @default(cuid())
+  adminId     String
+  admin       User         @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  action      AdminActionType
+  targetType  String       // "user", "agent", "order", etc.
+  targetId    String
+  reason      String?
+  details     String?      // JSON object with action details
+  createdAt   DateTime     @default(now())
+
+  @@index([adminId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+model AgentInsight {
+  id              String   @id @default(cuid())
+  agentId         String
+  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  date            DateTime @default(now())
+  views           Int      @default(0)
+  clicks          Int      @default(0)
+  conversions     Int      @default(0)
+  revenue         Float    @default(0)
+  searchRanking   Float?
+  qualityScore    Float?
+  recommendations String?  // JSON array of optimization suggestions
+
+  @@unique([agentId, date])
+  @@index([agentId])
+  @@index([date])
+}
+
+model UserPreferences {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Browsing preferences
+  preferredCategories   String?  // JSON array of preferred categories
+  priceRange            String?  // JSON object with min/max price range
+  ratingThreshold       Float    @default(0)
+
+  // Interface preferences
+  theme                 String   @default("light") // light, dark, auto
+  language              String   @default("en")
+  currency              String   @default("USD")
+  itemsPerPage          Int      @default(12)
+  defaultSortBy         String   @default("relevance") // relevance, price, rating, date
+  showFeaturedFirst     Boolean  @default(true)
+
+  // Notification preferences
+  emailNotifications    Boolean  @default(true)
+  pushNotifications     Boolean  @default(true)
+  marketingEmails       Boolean  @default(false)
+  weeklyDigest          Boolean  @default(true)
+  priceDropAlerts       Boolean  @default(true)
+  newAgentAlerts        Boolean  @default(false)
+
+  // Content preferences
+  showAdultContent      Boolean  @default(false)
+  preferredContentType  String?  // JSON array of content types
+  expertise             String   @default("all") // beginner, intermediate, advanced, all
+  usageType             String   @default("business") // personal, business, both
+
+  // AI-driven preferences (learned from behavior)
+  interestProfile       String?  // JSON object with interest scores
+  behaviorPattern       String?  // JSON object with behavior insights
+  recommendationWeights String?  // JSON object with feature weights for recommendations
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Enums
+enum UserRole {
+  BUYER
+  SELLER
+  ADMIN
+}
+
+enum AgentStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum TestType {
+  AUTOMATED_QUALITY
+  SECURITY_SCAN
+  PERFORMANCE_TEST
+  COMPATIBILITY_CHECK
+  MANUAL_REVIEW
+  USER_ACCEPTANCE
+}
+
+enum TestStatus {
+  PENDING
+  IN_PROGRESS
+  PASSED
+  FAILED
+  NEEDS_REVIEW
+  CANCELLED
+}
+
+enum NotificationType {
+  ORDER_UPDATE
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  AGENT_APPROVED
+  AGENT_REJECTED
+  NEW_REVIEW
+  SYSTEM_ALERT
+  ADMIN_MESSAGE
+  MILESTONE_REACHED
+}
+
+enum AdminActionType {
+  APPROVE_AGENT
+  REJECT_AGENT
+  SUSPEND_USER
+  ACTIVATE_USER
+  REMOVE_AGENT
+  FEATURE_AGENT
+  UNFEATURE_AGENT
+  REFUND_ORDER
+  DELETE_REVIEW
+  SEND_WARNING
+}
