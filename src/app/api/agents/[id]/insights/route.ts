@@ -2,6 +2,30 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import type { Agent, Order, Review } from '@prisma/client'
+
+// Type definitions for agent data with relations
+type AgentWithRelations = Agent & {
+  orders: Order[]
+  reviews: Review[]
+}
+
+// Type for metrics passed to optimization function
+type AgentMetrics = {
+  competitiveAnalysis: {
+    positioning: {
+      pricePosition: string
+    }
+  }
+}
+
+// Type for competitive analysis
+type CompetitiveAnalysis = {
+  averagePrice: number
+  positioning: {
+    pricePosition: string
+  }
+}
 
 export async function GET(
   request: NextRequest,
@@ -86,18 +110,18 @@ export async function GET(
   }
 }
 
-async function generateAgentInsights(agent: any, startDate: Date, endDate: Date) {
+async function generateAgentInsights(agent: AgentWithRelations, startDate: Date, endDate: Date) {
   // Basic performance metrics
-  const recentOrders = agent.orders.filter((order: any) =>
+  const recentOrders = agent.orders.filter((order: Order) =>
     new Date(order.createdAt) >= startDate
   )
-  const recentReviews = agent.reviews.filter((review: any) =>
+  const recentReviews = agent.reviews.filter((review: Review) =>
     new Date(review.createdAt) >= startDate
   )
 
   // Calculate metrics
-  const totalRevenue = agent.orders.reduce((sum: number, order: any) => sum + order.totalAmount, 0)
-  const recentRevenue = recentOrders.reduce((sum: number, order: any) => sum + order.totalAmount, 0)
+  const totalRevenue = agent.orders.reduce((sum: number, order: Order) => sum + order.totalAmount, 0)
+  const recentRevenue = recentOrders.reduce((sum: number, order: Order) => sum + order.totalAmount, 0)
   const conversionRate = calculateConversionRate(agent)
   const customerSatisfaction = calculateCustomerSatisfaction(agent.reviews)
   const marketPosition = await calculateMarketPosition(agent)
@@ -164,13 +188,13 @@ async function generateAgentInsights(agent: any, startDate: Date, endDate: Date)
   }
 }
 
-function calculateConversionRate(agent: any) {
+function calculateConversionRate(agent: AgentWithRelations) {
   // Simulated view data (in real app, track actual views)
   const estimatedViews = agent.totalSales * (8 + Math.random() * 12) // 8-20x sales as views
   return agent.totalSales > 0 ? (agent.totalSales / estimatedViews) * 100 : 0
 }
 
-function calculateCustomerSatisfaction(reviews: any[]) {
+function calculateCustomerSatisfaction(reviews: Review[]) {
   if (reviews.length === 0) return 0
 
   const avgRating = reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
@@ -191,7 +215,7 @@ function calculateCustomerSatisfaction(reviews: any[]) {
   }
 }
 
-async function calculateMarketPosition(agent: any) {
+async function calculateMarketPosition(agent: AgentWithRelations) {
   // Get category competitors
   const categoryAgents = await prisma.agent.findMany({
     where: {
@@ -237,7 +261,7 @@ async function calculateMarketPosition(agent: any) {
   }
 }
 
-async function generateCompetitiveAnalysis(agent: any) {
+async function generateCompetitiveAnalysis(agent: AgentWithRelations) {
   const competitors = await prisma.agent.findMany({
     where: {
       category: agent.category,
@@ -283,7 +307,7 @@ async function generateCompetitiveAnalysis(agent: any) {
   }
 }
 
-function generateOptimizationRecommendations(agent: any, metrics: any) {
+function generateOptimizationRecommendations(agent: AgentWithRelations, metrics: AgentMetrics) {
   const recommendations = []
 
   // Price optimization
@@ -345,15 +369,15 @@ function generateOptimizationRecommendations(agent: any, metrics: any) {
   return recommendations
 }
 
-function generateCustomerInsights(orders: any[], reviews: any[]) {
+function generateCustomerInsights(orders: Order[], reviews: Review[]) {
   // Analyze customer behavior patterns
-  const customerTypes = orders.reduce((acc: any, order) => {
+  const customerTypes = orders.reduce((acc: Record<string, number>, order) => {
     const buyerId = order.buyer.id
     acc[buyerId] = (acc[buyerId] || 0) + 1
     return acc
   }, {})
 
-  const repeatCustomers = Object.values(customerTypes).filter((count: any) => count > 1).length
+  const repeatCustomers = Object.values(customerTypes).filter((count: number) => count > 1).length
   const repeatRate = orders.length > 0 ? (repeatCustomers / Object.keys(customerTypes).length) * 100 : 0
 
   // Recent customer feedback themes
@@ -391,7 +415,7 @@ function generateCustomerInsights(orders: any[], reviews: any[]) {
   }
 }
 
-function calculatePerformanceScore(agent: any, metrics: any) {
+function calculatePerformanceScore(agent: AgentWithRelations, metrics: AgentMetrics) {
   let score = 0
 
   // Sales performance (30%)
@@ -418,8 +442,8 @@ function calculatePerformanceScore(agent: any, metrics: any) {
 }
 
 // Analysis helper functions
-function analyzeDescriptionQuality(agent: any) {
-  const description = agent.description + ' ' + (agent.longDescription || '')
+function analyzeDescriptionQuality(agent: AgentWithRelations) {
+  const description = `${agent.description} ${agent.longDescription || ''}`
   return {
     length: description.length,
     readability: description.length > 100 ? 'Good' : 'Needs improvement',
@@ -428,7 +452,7 @@ function analyzeDescriptionQuality(agent: any) {
   }
 }
 
-function analyzePricingStrategy(agent: any, competitive: any) {
+function analyzePricingStrategy(agent: AgentWithRelations, competitive: CompetitiveAnalysis) {
   return {
     currentPrice: agent.price,
     marketAverage: competitive.marketAverages.price,
@@ -440,7 +464,7 @@ function analyzePricingStrategy(agent: any, competitive: any) {
   }
 }
 
-function analyzeVisualPresentation(agent: any) {
+function analyzeVisualPresentation(agent: AgentWithRelations) {
   return {
     hasImage: !!agent.image,
     hasPreview: !!agent.preview,
@@ -449,7 +473,7 @@ function analyzeVisualPresentation(agent: any) {
   }
 }
 
-function analyzeUserEngagement(agent: any) {
+function analyzeUserEngagement(agent: AgentWithRelations) {
   const engagementRate = agent.reviews.length / Math.max(agent.totalSales, 1)
   return {
     reviewRate: engagementRate * 100,
@@ -458,7 +482,7 @@ function analyzeUserEngagement(agent: any) {
   }
 }
 
-function analyzeKeywordRelevance(agent: any) {
+function analyzeKeywordRelevance(agent: AgentWithRelations) {
   const text = `${agent.name} ${agent.description} ${agent.category}`.toLowerCase()
   const keywords = extractKeywords(text)
   return {
@@ -468,7 +492,7 @@ function analyzeKeywordRelevance(agent: any) {
   }
 }
 
-function analyzeCategoryOptimization(agent: any) {
+function analyzeCategoryOptimization(agent: AgentWithRelations) {
   return {
     currentCategory: agent.category,
     categoryFit: 'Good', // Would need ML analysis for real scoring
@@ -477,7 +501,7 @@ function analyzeCategoryOptimization(agent: any) {
   }
 }
 
-function analyzeTagEffectiveness(agent: any) {
+function analyzeTagEffectiveness(agent: AgentWithRelations) {
   try {
     const tags = JSON.parse(agent.tags || '[]')
     return {
@@ -491,7 +515,7 @@ function analyzeTagEffectiveness(agent: any) {
   }
 }
 
-async function calculateSearchRanking(agent: any) {
+async function calculateSearchRanking(agent: AgentWithRelations) {
   // Simulate search ranking calculation
   const categoryAgents = await prisma.agent.count({
     where: { category: agent.category, status: 'APPROVED' }
@@ -527,7 +551,7 @@ function extractKeywords(text: string) {
   return [...new Set(words.filter(word => word.length > 3 && !stopWords.has(word)))]
 }
 
-function calculateDescriptionCompleteness(agent: any) {
+function calculateDescriptionCompleteness(agent: AgentWithRelations) {
   let score = 0
   if (agent.description && agent.description.length > 50) score += 25
   if (agent.longDescription && agent.longDescription.length > 200) score += 25
@@ -536,7 +560,7 @@ function calculateDescriptionCompleteness(agent: any) {
   return score
 }
 
-function generateSuggestedTags(agent: any) {
+function generateSuggestedTags(agent: AgentWithRelations) {
   const categoryTags = {
     'Customer Support': ['support', 'helpdesk', 'chat', 'tickets', 'automation'],
     'Data Analysis': ['analytics', 'data', 'reporting', 'insights', 'visualization'],
@@ -548,7 +572,7 @@ function generateSuggestedTags(agent: any) {
   return categoryTags[agent.category as keyof typeof categoryTags] || ['automation', 'workflow', 'productivity']
 }
 
-function generateSalesTrend(orders: any[], startDate: Date, endDate: Date) {
+function generateSalesTrend(orders: Order[], startDate: Date, endDate: Date) {
   const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
   const trend = []
 
@@ -572,7 +596,7 @@ function generateSalesTrend(orders: any[], startDate: Date, endDate: Date) {
   return trend
 }
 
-function generateRatingTrend(reviews: any[], startDate: Date, endDate: Date) {
+function generateRatingTrend(reviews: Review[], startDate: Date, endDate: Date) {
   const trend = []
   let cumulativeRating = 0
   let reviewCount = 0
@@ -593,7 +617,7 @@ function generateRatingTrend(reviews: any[], startDate: Date, endDate: Date) {
   return trend
 }
 
-function generateRevenueTrend(orders: any[], startDate: Date, endDate: Date) {
+function generateRevenueTrend(orders: Order[], startDate: Date, endDate: Date) {
   const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
   const trend = []
 

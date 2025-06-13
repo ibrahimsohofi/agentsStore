@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notifyAgentApproved, notifyAgentRejected } from '@/lib/notifications'
 import type { AdminActionResult } from '@/types/admin'
+import type { AdminActionType, NotificationType } from '@prisma/client'
 
 export async function POST(request: NextRequest) {
   try {
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
     await prisma.adminAction.create({
       data: {
         adminId: session.user.id,
-        action: action as any, // Prisma enum type
+        action: action as AdminActionType,
         targetType,
         targetId,
         reason,
@@ -387,7 +388,7 @@ async function createNotification(
   return await prisma.notification.create({
     data: {
       userId,
-      type: type as any, // Prisma enum type
+      type: type as NotificationType,
       title,
       message,
       data: data ? JSON.stringify(data) : null

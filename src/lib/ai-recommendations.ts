@@ -135,9 +135,11 @@ export class AIRecommendationEngine {
     // Create user-item matrix for collaborative filtering
     const matrix = new Matrix(userIds.length, agentIds.length)
 
-    userIds.forEach((userId, userIndex) => {
-      const profile = this.userProfiles.get(userId)!
-      agentIds.forEach((agentId, agentIndex) => {
+    for (const [userIndex, userId] of userIds.entries()) {
+      const profile = this.userProfiles.get(userId)
+      if (!profile) continue
+
+      for (const [agentIndex, agentId] of agentIds.entries()) {
         // Check if user has interacted with this agent
         const rating = profile.behaviorData.ratingHistory.find(r => r.agentId === agentId)?.rating || 0
         const purchased = profile.behaviorData.purchasedAgents.includes(agentId) ? 1 : 0
@@ -145,8 +147,8 @@ export class AIRecommendationEngine {
         // Combine rating and purchase behavior
         const score = rating > 0 ? rating : (purchased * 3) // Give purchased items a base score
         matrix.set(userIndex, agentIndex, score)
-      })
-    })
+      }
+    }
 
     this.collaborativeMatrix = matrix
   }
@@ -305,7 +307,9 @@ export class AIRecommendationEngine {
   }
 
   private async getContentBasedRecommendations(userId: string, limit: number): Promise<RecommendationResult[]> {
-    const userProfile = this.userProfiles.get(userId)!
+    const userProfile = this.userProfiles.get(userId)
+    if (!userProfile) return []
+
     const recommendations: RecommendationResult[] = []
 
     // Get user's interaction history to build preference profile
@@ -361,7 +365,9 @@ export class AIRecommendationEngine {
   }
 
   private async getPersonalizedRecommendations(userId: string, limit: number): Promise<RecommendationResult[]> {
-    const userProfile = this.userProfiles.get(userId)!
+    const userProfile = this.userProfiles.get(userId)
+    if (!userProfile) return []
+
     const recommendations: RecommendationResult[] = []
 
     // Filter agents based on user preferences
@@ -400,7 +406,7 @@ export class AIRecommendationEngine {
         reason: 'Matches your preferences and interests',
         type: 'personalized'
       })
-    })
+    }
 
     return recommendations
       .sort((a, b) => b.score - a.score)
@@ -415,14 +421,14 @@ export class AIRecommendationEngine {
       .sort((a, b) => (b.popularityScore + b.qualityScore) - (a.popularityScore + a.qualityScore))
       .slice(0, limit)
 
-    trendingAgents.forEach(agent => {
+    for (const agent of trendingAgents) {
       recommendations.push({
         agentId: agent.id,
         score: agent.popularityScore + agent.qualityScore,
         reason: 'Trending and highly rated',
         type: 'trending'
       })
-    })
+    }
 
     return recommendations
   }
@@ -449,14 +455,14 @@ export class AIRecommendationEngine {
     const seen = new Set<string>()
     const unique: RecommendationResult[] = []
 
-    recommendations
-      .sort((a, b) => b.score - a.score)
-      .forEach(rec => {
-        if (!seen.has(rec.agentId)) {
-          seen.add(rec.agentId)
-          unique.push(rec)
-        }
-      })
+    const sortedRecommendations = recommendations.sort((a, b) => b.score - a.score)
+
+    for (const rec of sortedRecommendations) {
+      if (!seen.has(rec.agentId)) {
+        seen.add(rec.agentId)
+        unique.push(rec)
+      }
+    }
 
     return unique
   }

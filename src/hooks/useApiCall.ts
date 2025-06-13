@@ -7,8 +7,8 @@ interface ApiState<T> {
   error: string | null
 }
 
-interface ApiCallOptions {
-  onSuccess?: (data: any) => void
+interface ApiCallOptions<T = unknown> {
+  onSuccess?: (data: T) => void
   onError?: (error: string) => void
   showSuccessToast?: boolean
   showErrorToast?: boolean
@@ -16,8 +16,8 @@ interface ApiCallOptions {
   errorMessage?: string
 }
 
-interface UseApiCallResult<T> extends ApiState<T> {
-  execute: (...args: any[]) => Promise<T | null>
+interface UseApiCallResult<T, TArgs extends readonly unknown[] = readonly unknown[]> extends ApiState<T> {
+  execute: (...args: TArgs) => Promise<T | null>
   reset: () => void
   refetch: () => Promise<T | null>
 }
@@ -25,17 +25,17 @@ interface UseApiCallResult<T> extends ApiState<T> {
 /**
  * Hook for handling API calls with loading, error states, and automatic retries
  */
-export function useApiCall<T = any>(
-  apiFunction: (...args: any[]) => Promise<T>,
-  options: ApiCallOptions = {}
-): UseApiCallResult<T> {
+export function useApiCall<T = unknown, TArgs extends readonly unknown[] = readonly unknown[]>(
+  apiFunction: (...args: TArgs) => Promise<T>,
+  options: ApiCallOptions<T> = {}
+): UseApiCallResult<T, TArgs> {
   const [state, setState] = useState<ApiState<T>>({
     data: null,
     loading: false,
     error: null,
   })
 
-  const lastArgsRef = useRef<any[]>([])
+  const lastArgsRef = useRef<TArgs>([] as unknown as TArgs)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function useApiCall<T = any>(
   }, [])
 
   const execute = useCallback(
-    async (...args: any[]): Promise<T | null> => {
+    async (...args: TArgs): Promise<T | null> => {
       lastArgsRef.current = args
 
       setState(prev => ({ ...prev, loading: true, error: null }))
@@ -115,14 +115,14 @@ export function useApiCall<T = any>(
 /**
  * Hook for fetching data on component mount with optional auto-refresh
  */
-export function useFetch<T = any>(
+export function useFetch<T = unknown>(
   apiFunction: () => Promise<T>,
   options: {
     immediate?: boolean
     refreshInterval?: number
-    deps?: any[]
-  } & ApiCallOptions = {}
-): UseApiCallResult<T> & { refresh: () => Promise<T | null> } {
+    deps?: React.DependencyList
+  } & ApiCallOptions<T> = {}
+): UseApiCallResult<T, []> & { refresh: () => Promise<T | null> } {
   const { immediate = true, refreshInterval, deps = [] } = options
   const apiCall = useApiCall(apiFunction, options)
   const intervalRef = useRef<NodeJS.Timeout>()
@@ -165,14 +165,14 @@ export function useFetch<T = any>(
 /**
  * Hook for mutations (POST, PUT, DELETE) with optimistic updates
  */
-export function useMutation<T = any, TVariables = any>(
+export function useMutation<T = unknown, TVariables = unknown>(
   mutationFn: (variables: TVariables) => Promise<T>,
   options: {
     onMutate?: (variables: TVariables) => void | Promise<void>
     onSuccess?: (data: T, variables: TVariables) => void
     onError?: (error: string, variables: TVariables) => void
     onSettled?: (data: T | null, error: string | null, variables: TVariables) => void
-  } & ApiCallOptions = {}
+  } & ApiCallOptions<T> = {}
 ) {
   const apiCall = useApiCall(mutationFn, options)
 
@@ -207,7 +207,7 @@ export function useMutation<T = any, TVariables = any>(
 /**
  * Hook for retrying failed operations with exponential backoff
  */
-export function useRetry<T = any>(
+export function useRetry<T = unknown>(
   operation: () => Promise<T>,
   options: {
     maxRetries?: number
@@ -271,16 +271,16 @@ export function useRetry<T = any>(
 /**
  * Hook for debounced API calls (useful for search)
  */
-export function useDebouncedApiCall<T = any>(
-  apiFunction: (...args: any[]) => Promise<T>,
+export function useDebouncedApiCall<T = unknown, TArgs extends readonly unknown[] = readonly unknown[]>(
+  apiFunction: (...args: TArgs) => Promise<T>,
   delay = 300,
-  options: ApiCallOptions = {}
-): UseApiCallResult<T> & { debouncedExecute: (...args: any[]) => void } {
+  options: ApiCallOptions<T> = {}
+): UseApiCallResult<T, TArgs> & { debouncedExecute: (...args: TArgs) => void } {
   const apiCall = useApiCall(apiFunction, options)
   const timeoutRef = useRef<NodeJS.Timeout>()
 
   const debouncedExecute = useCallback(
-    (...args: any[]) => {
+    (...args: TArgs) => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
       }
@@ -309,8 +309,8 @@ export function useDebouncedApiCall<T = any>(
 /**
  * Hook for pagination with API calls
  */
-export function usePaginatedFetch<T = any>(
-  apiFunction: (page: number, ...args: any[]) => Promise<{ data: T[]; total: number; page: number; limit: number }>,
+export function usePaginatedFetch<T = unknown, TArgs extends readonly unknown[] = readonly unknown[]>(
+  apiFunction: (page: number, ...args: TArgs) => Promise<{ data: T[]; total: number; page: number; limit: number }>,
   options: {
     initialPage?: number
     limit?: number
@@ -324,7 +324,7 @@ export function usePaginatedFetch<T = any>(
   const [hasMore, setHasMore] = useState(true)
 
   const apiCall = useApiCall(
-    async (page: number, ...args: any[]) => {
+    async (page: number, ...args: TArgs) => {
       const result = await apiFunction(page, ...args)
       return result
     },
@@ -332,7 +332,7 @@ export function usePaginatedFetch<T = any>(
   )
 
   const loadPage = useCallback(
-    async (page: number, ...args: any[]) => {
+    async (page: number, ...args: TArgs) => {
       const result = await apiCall.execute(page, ...args)
       if (result) {
         setTotalItems(result.total)
@@ -350,7 +350,7 @@ export function usePaginatedFetch<T = any>(
   )
 
   const loadMore = useCallback(
-    async (...args: any[]) => {
+    async (...args: TArgs) => {
       if (!hasMore || apiCall.loading) return
       const nextPage = currentPage + 1
       setCurrentPage(nextPage)
@@ -360,7 +360,7 @@ export function usePaginatedFetch<T = any>(
   )
 
   const refresh = useCallback(
-    async (...args: any[]) => {
+    async (...args: TArgs) => {
       setCurrentPage(1)
       setAllData([])
       return loadPage(1, ...args)
